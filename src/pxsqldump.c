@@ -86,15 +86,21 @@ int create_sql_CREATE(px_header *header, px_fieldInfo **felder)
 	return 0;
 }
 
-int create_sql_INSERT(px_header *header, px_fieldInfo **felder, px_records block, char *blobname)
+int create_sql_INSERT(px_header *header, px_fieldInfo **felder, px_records block, char *blobname, int insert_table)
 {
 	int i, block_index = 0;
 	char *name = NULL;
 
-	name = quote(header->tableName, name_quoting);
-	printf("INSERT INTO %s VALUES (", name);
-	free(name);
-
+	if (insert_table == 1)
+	{
+		name = quote(header->tableName, name_quoting);
+		printf("INSERT INTO %s VALUES (", name);
+		free(name);
+	}
+	else if (insert_table == 2)
+	{
+		printf("  (");
+	}    
 #define BLOCK_COPY(x,size) \
 		memcpy(x,   block + block_index, size); \
 		/*printf("\nBl-IDX1: %04x - ",block_index);*/ \
@@ -355,16 +361,28 @@ int create_sql_INSERT(px_header *header, px_fieldInfo **felder, px_records block
 		}
 	}
 #undef BLOCK_COPY
-	printf(");\n");
+	if (insert_table == 1)
+	{	  
+		printf(");\n");
+	}
+	else if (insert_table == 2)
+	{	  
+		printf(")");
+	}
 
 	return 0;
 }
-int create_sql_dump(px_header *header, px_fieldInfo **felder, px_blocks **blocks, char *blobname, int create_table)
+int create_sql_dump(px_header *header, px_fieldInfo **felder, px_blocks **blocks, char *blobname, int create_table, int insert_table)
 {
 	int n,f,c = 0;
+	int csc = 0;
+	int line_counter = 0;
+	char *name = NULL;
 
 	if ( create_table == 1 )
-		create_sql_CREATE(header, felder);
+		csc = create_sql_CREATE(header, felder);
+	if ( insert_table == 0 )
+		return csc;
 
 	n = header->firstBlock - 1;
 	while (n != -1)
@@ -379,10 +397,32 @@ int create_sql_dump(px_header *header, px_fieldInfo **felder, px_blocks **blocks
 		}
 		for (f = 0; f < blocks[n]->numRecsInBlock; f++)
 		{
-			create_sql_INSERT(header, felder, blocks[n]->records[f], blobname);
+			if ( insert_table == 2 )
+			{
+				if ((line_counter % 250) == 0)
+				{
+					name = quote(header->tableName, name_quoting);
+					if (line_counter > 0)
+					{
+						printf(";\n");
+					}
+					printf("INSERT INTO %s VALUES\n", name);
+					free(name);
+				}
+				else
+				{
+					printf(",\n");
+				}
+			}
+			create_sql_INSERT(header, felder, blocks[n]->records[f], blobname, insert_table);
+			line_counter++;
 		}
 		n = blocks[n]->nextBlock - 1;
 		c++;
+	}
+	if (insert_table == 2 && line_counter > 0)
+	{
+		printf(";\n");
 	}
 	return 0;
 }
@@ -481,10 +521,30 @@ char *quote(const unsigned char *src, const unsigned int name_quoting)
 {
 	unsigned int len;
 	char *dst = NULL;
+	unsigned int quote_me = name_quoting;
+        unsigned char *p = src;
 
-	len = (name_quoting) ? strlen(src) + 2 : strlen(src);
+	// force quoting for non alpha-num
+	while (quote_me == 0 && *p != '\0')
+	{
+		if (isalnum((int)*p) == 0 && *p != '_')
+		{
+		  	quote_me = 2;  // special backtick quotes
+			break;
+		}
+		p++;
+	}
+		       
+	len = (quote_me) ? strlen(src) + 2 : strlen(src);
 	dst = malloc((len + 1) * sizeof(char));
-	(name_quoting) ? (void) sprintf(dst, "\"%s\"", src) : strcpy(dst, src);
+	if (quote_me == 2)
+	{
+		sprintf(dst, "`%s`", src);
+	}
+	else
+	{
+		(quote_me) ? (void) sprintf(dst, "\"%s\"", src) : strcpy(dst, src);
+	}
 
 	return dst;
 }
@@ -506,6 +566,10 @@ void display_help ()
 	       "  -q, --no_namequoting         Force name quoting deactivation\n"
 	       "  -Q, --namequoting            Force name quoting activation\n"
 	       "  -s, --no_create              Skip table creation (insert data only)\n"
+	       "  -S, --create                 Create the table statement\n"
+	       "  -i, --no-insert              Do not output value insert satements\n"
+	       "  -I, --insert                 Emit value insertion statements\n"
+	       "  -c, --combined_insert        Emit a single insert statement per block of values\n"
 	       "  -V, --version                Output version information and exit\n"
 	       "\n"
 	       "\n", PACKAGE, VERSION);
@@ -528,6 +592,7 @@ int main ( int argc, char **argv)
 
 	int f,i,settablename = 0;
 	int create_table = 1;
+	int insert_table = 1;   // 0 - no insert, 1 - insert sql statement for each line, 2 - insert as a single sql statement
 	char tablename[255] = "";
 	char *blobname = NULL, *filename = NULL;
 #ifdef HAVE_GETOPT_LONG
@@ -541,15 +606,19 @@ int main ( int argc, char **argv)
 		{"no_namequoting", no_argument, 0, 'q'},
 		{"namequoting", no_argument, 0, 'Q'},
 		{"no_create", no_argument, 0, 's'},
+		{"create", no_argument, 0, 'S'},
+		{"no_insert", no_argument, 0, 'i'},
+		{"insert", no_argument, 0, 'I'},
+		{"combined_insert", no_argument, 0, 'c'},
 		{"version", no_argument, 0, 'V'},
 		{0, 0, 0, 0}
 	};
 #endif
 	while ( 
 #ifdef HAVE_GETOPT_LONG
-		(i = getopt_long(argc, argv, "b:d:f:hn:qQsV", long_options, (int *) 0)) != EOF
+		(i = getopt_long(argc, argv, "b:d:f:hn:qQsSiIcV", long_options, (int *) 0)) != EOF
 #else
-		(i = getopt(argc, argv, "b:d:f:hn:qQsV")) != EOF
+		(i = getopt(argc, argv, "b:d:f:hn:qQsSiIcV")) != EOF
 #endif
 		)
 	{
@@ -563,6 +632,18 @@ int main ( int argc, char **argv)
 			break;
 		    case 's' :
 			create_table = 0;
+			break;
+		    case 'S' :
+			create_table = 1;
+			break;
+		    case 'i' :
+			insert_table = 0;
+			break;
+		    case 'I' :
+			insert_table = 1;
+			break;
+		    case 'c' :
+			insert_table = 2;
 			break;
 		    case 'n' :
 			settablename = 1;
@@ -661,7 +742,7 @@ int main ( int argc, char **argv)
 		return(-1);
 	}
 
-	create_sql_dump (&header, felder, blocks, blobname, create_table);
+	create_sql_dump (&header, felder, blocks, blobname, create_table, insert_table);
 
 	return 0;
 }
