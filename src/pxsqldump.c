@@ -76,7 +76,7 @@ int create_sql_CREATE(px_header *header, px_fieldInfo **felder)
 			printf("(12,2)");
 			break;
 		    case PX_Field_Type_Incremental:
-			printf(" NOT NULL /* auto_increment */");
+		      	printf(" NOT NULL PRIMARY KEY /* auto_increment */");
 			break;
 		}
 
