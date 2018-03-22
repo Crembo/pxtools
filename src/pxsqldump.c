@@ -56,7 +56,7 @@ int create_sql_CREATE(px_header *header, px_fieldInfo **felder)
 		    case PX_Field_Type_MemoBLOB:	printf("BLOB"); break;
 		    case PX_Field_Type_BinBLOB:	printf("BLOB"); break;
 		    case PX_Field_Type_Graphic:	printf("BLOB"); break;
-		    case PX_Field_Type_Logical:	printf("INTEGER"); break;
+		    case PX_Field_Type_Logical:	if (felder[i]->size == 1) printf("TINYINT"); else printf("INTEGER"); break;
 		    case PX_Field_Type_Time:	printf("TIME"); break;
 		    case PX_Field_Type_Timestamp:	printf("TIMESTAMP"); break;
 		    case PX_Field_Type_Incremental:	printf("INTEGER"); break;
