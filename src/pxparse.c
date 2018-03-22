@@ -5,6 +5,7 @@
 #include <time.h>
 #include <libintl.h>
 #include <string.h>
+#include <stdint.h>
 #include "pxtypes.h"
 #include "pxparse.h"
 #include "pxconvert.h"
@@ -165,7 +166,7 @@ px_fieldInfo **PXparseCompleteHeader (int fd, px_header *header) {
 	char unp_head[0x58];
 	char unp_head4[0x20];
 	unsigned char d[2];
-	void *ptr;
+	uint32_t ptr; //void *ptr;
 	
 	int i;
 	char c;
