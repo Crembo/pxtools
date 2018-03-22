@@ -170,7 +170,7 @@ int create_sql_INSERT(px_header *header, px_fieldInfo **felder, px_records block
 		}
 		else if (felder[i]->type == PX_Field_Type_LongInt)
 		{
-			unsigned long s;
+			long s;
 			unsigned long long d;
 
 			BLOCK_COPY(&s, felder[i]->size);
@@ -178,7 +178,10 @@ int create_sql_INSERT(px_header *header, px_fieldInfo **felder, px_records block
 			switch(PXtoLong(s, &d, felder[i]->type))
 			{
 			    case VALUE_OK:
-				printf("%Ld", d );
+                                if (d >= 4294966837) //== 4294967295)
+                                    printf("%d", (int)d );
+                                else
+                                    printf("%Ld", d );
 				break;
 			    case VALUE_IS_NULL:
 				printf("NULL");
