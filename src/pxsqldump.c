@@ -97,7 +97,7 @@ int create_sql_INSERT(px_header *header, px_fieldInfo **felder, px_records block
 		printf("INSERT INTO %s VALUES (", name);
 		free(name);
 	}
-	else if (insert_table == 2)
+	else if (insert_table > 1)
 	{
 		printf("  (");
 	}    
@@ -365,7 +365,7 @@ int create_sql_INSERT(px_header *header, px_fieldInfo **felder, px_records block
 	{	  
 		printf(");\n");
 	}
-	else if (insert_table == 2)
+	else if (insert_table > 1)
 	{	  
 		printf(")");
 	}
@@ -397,9 +397,9 @@ int create_sql_dump(px_header *header, px_fieldInfo **felder, px_blocks **blocks
 		}
 		for (f = 0; f < blocks[n]->numRecsInBlock; f++)
 		{
-			if ( insert_table == 2 )
+			if ( insert_table > 1 )
 			{
-				if ((line_counter % 250) == 0)
+				if ((line_counter % insert_table) == 0)
 				{
 					name = quote(header->tableName, name_quoting);
 					if (line_counter > 0)
@@ -420,7 +420,7 @@ int create_sql_dump(px_header *header, px_fieldInfo **felder, px_blocks **blocks
 		n = blocks[n]->nextBlock - 1;
 		c++;
 	}
-	if (insert_table == 2 && line_counter > 0)
+	if (insert_table > 1 && line_counter > 0)
 	{
 		printf(";\n");
 	}
@@ -568,8 +568,7 @@ void display_help ()
 	       "  -s, --no_create              Skip table creation (insert data only)\n"
 	       "  -S, --create                 Create the table statement\n"
 	       "  -i, --no-insert              Do not output value insert satements\n"
-	       "  -I, --insert                 Emit value insertion statements\n"
-	       "  -c, --combined_insert        Emit a single insert statement per block of values\n"
+	       "  -I, --insert=<batch_size>    Emit value insertion statements\n"
 	       "  -V, --version                Output version information and exit\n"
 	       "\n"
 	       "\n", PACKAGE, VERSION);
@@ -592,9 +591,11 @@ int main ( int argc, char **argv)
 
 	int f,i,settablename = 0;
 	int create_table = 1;
-	int insert_table = 1;   // 0 - no insert, 1 - insert sql statement for each line, 2 - insert as a single sql statement
+	int insert_table = 1;   // 0 - no insert, 1 - insert sql statement for each line, > 1 size of batch insert
 	char tablename[255] = "";
 	char *blobname = NULL, *filename = NULL;
+	int batch_size = 0;
+
 #ifdef HAVE_GETOPT_LONG
 	static struct option long_options[] =
 	{
@@ -608,17 +609,16 @@ int main ( int argc, char **argv)
 		{"no_create", no_argument, 0, 's'},
 		{"create", no_argument, 0, 'S'},
 		{"no_insert", no_argument, 0, 'i'},
-		{"insert", no_argument, 0, 'I'},
-		{"combined_insert", no_argument, 0, 'c'},
+		{"insert", optional_argument, 0, 'I'},
 		{"version", no_argument, 0, 'V'},
 		{0, 0, 0, 0}
 	};
 #endif
 	while ( 
 #ifdef HAVE_GETOPT_LONG
-		(i = getopt_long(argc, argv, "b:d:f:hn:qQsSiIcV", long_options, (int *) 0)) != EOF
+		(i = getopt_long(argc, argv, "b:d:f:hn:qQsSiI::V", long_options, (int *) 0)) != EOF
 #else
-		(i = getopt(argc, argv, "b:d:f:hn:qQsSiIcV")) != EOF
+		(i = getopt(argc, argv, "b:d:f:hn:qQsSiI::V")) != EOF
 #endif
 		)
 	{
@@ -641,9 +641,14 @@ int main ( int argc, char **argv)
 			break;
 		    case 'I' :
 			insert_table = 1;
-			break;
-		    case 'c' :
-			insert_table = 2;
+			if (optarg != NULL)
+			{
+				batch_size = atoi(optarg);
+				if (batch_size > 1)
+				{
+					insert_table = batch_size;
+				}
+			}
 			break;
 		    case 'n' :
 			settablename = 1;
